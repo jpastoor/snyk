@@ -92,6 +92,7 @@ func (c *Client) RawQuery(ctx context.Context, verb, path string, customHeaders 
 
 	req.Header.Add("Authorization", fmt.Sprintf("token %s", c.Token))
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	req.Header.Set("Cache-Control", "only-if-cached")
 
 	for k, v := range customHeaders {
 		req.Header.Set(k, v)
@@ -686,4 +687,73 @@ func (c *Client) OrganizationImportProject(ctx context.Context, orgID, integrati
 	}
 
 	return callBackURL, nil
+}
+
+type DependencyFilters struct {
+	Languages []string `json:"languages"`
+	// Projects is the list of project IDs to filter the results by
+	Projects []string `json:"projects"`
+	// Projects is the list of dependency IDs to filter the results by (i.e. amdefine@1.0.1 or org.javassist:javassist@3.18.1-GA)
+	Dependencies []string `json:"dependencies"`
+	Licences     []string `json:"licences"`
+	Severity     []string `json:"severity"`
+	DepStatus    string   `json:"depStatus"`
+}
+
+type Dependency struct {
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	Version  string          `json:"version"`
+	Type     string          `json:"type"`
+	Projects []ProjectIdName `json:"projects"`
+}
+
+type ProjectIdName struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type listAllDependenciesResponse struct {
+	Results []Dependency `json:"results"`
+	Total   int          `json:"total"`
+}
+
+func (c *Client) ListAllDependencies(ctx context.Context, orgID string, filters *DependencyFilters) ([]Dependency, error) {
+
+	dependencies := make([]Dependency, 0)
+	data := struct {
+		Filters *DependencyFilters `json:"filters"`
+	}{
+		filters,
+	}
+
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	body := bytes.NewReader(jsonBytes)
+
+	perPage := 1000
+	page := 1
+	for {
+		rsp := &listAllDependenciesResponse{}
+		err = c.RawQuery(ctx, "POST", fmt.Sprintf("org/%s/dependencies?perPage=%d&page=%d", orgID, perPage, page), nil, body, rsp)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, dep := range rsp.Results {
+			dependencies = append(dependencies, dep)
+		}
+
+		if len(rsp.Results) < perPage {
+			break
+		}
+
+		page++
+	}
+
+	// TODO paginating
+
+	return dependencies, nil
 }
