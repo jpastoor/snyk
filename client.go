@@ -92,7 +92,6 @@ func (c *Client) RawQuery(ctx context.Context, verb, path string, customHeaders 
 
 	req.Header.Add("Authorization", fmt.Sprintf("token %s", c.Token))
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Cache-Control", "only-if-cached")
 
 	for k, v := range customHeaders {
 		req.Header.Set(k, v)
